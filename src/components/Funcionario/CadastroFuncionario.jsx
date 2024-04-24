@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react'
+import banco from '../../utils/db'
 
-const CadastroFuncionario = ({ onCadastro }) => {
+const CadastroFuncionario = ({ onCadastro, listaDependentes }) => {
+  const [funcionarios, setFuncionarios] = useState([])
   const [nome, setNome] = useState('');
   const [cargo, setCargo] = useState('');
   const [funcao, setFuncao] = useState('');
@@ -8,26 +10,72 @@ const CadastroFuncionario = ({ onCadastro }) => {
   const [cpf, setCpf] = useState('');
   const [sexo, setSexo] = useState('');
   const [tipoEmpregado, setTipoEmpregado] = useState('');
-  const [temFilhos, setTemFilhos] = useState(false);
-  const [quantidadeFilhos, setQuantidadeFilhos] = useState(0);
+  const [dependentesSelecionados, setDependentesSelecionados] = useState([]);
   const [salarioBruto, setSalarioBruto] = useState(3000);
+  const [descontoBeneficio, setDescontoBeneficio] = useState(false);
+  const [dataAdmissao, setDataAdmissao] = useState('');
+  const [salarioMaternidade, setSalarioMaternidade] = useState(false);
+  const [temDSR, setTemDSR] = useState(false);
 
-  const [descontos, setDescontos] = useState({
-    inss: false,
-    sindical: false,
-    fgts: true,
-    valeAlimentacao: false,
-    valeTransporte: false
-  });
 
-  const [diasTrabalhados, setDiasTrabalhados] = useState(0);
-  const [horasExtras, setHorasExtras] = useState('');
-  const [comissao, setComissao] = useState('');
+  const handleAddDependente = (dependente) => {
+    setDependentesSelecionados([...dependentesSelecionados, dependente]);
+  };
 
-  const [mensagem, setMensagem] = useState('');
+  const handleRemoveDependente = (dependente) => {
+    const updatedDependentes = dependentesSelecionados.filter(dep => dep !== dependente);
+    setDependentesSelecionados(updatedDependentes);
+  };
+  useEffect(() => {
+    const funcionariosSalvos = banco.getData('funcionarios');
+    if (funcionariosSalvos) {
+      setFuncionarios(funcionariosSalvos);
+    }
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (
+      nome.trim() === '' ||
+      cargo.trim() === '' ||
+      funcao.trim() === '' ||
+      telefone.trim() === '' ||
+      cpf.trim() === '' ||
+      sexo.trim() === '' ||
+      tipoEmpregado.trim() === '' ||
+      dataAdmissao.trim() === ''
+    ) {
+      setMensagem('Todos os campos devem ser preenchidos');
+      return;
+    }
+    let salarioLiquido = salarioBruto;
+    const comissaoFloat = parseFloat(comissao);
+    if (!isNaN(comissaoFloat)) {
+      salarioLiquido += comissaoFloat;
+    }
+    const descontoINSS = 227.40;
+    salarioLiquido -= descontoINSS;
+
+    const descontoIRRF = 61.40;
+    salarioLiquido -= descontoIRRF;
+
+    const descontoFGTS = 240;
+    salarioLiquido -= descontoFGTS;
+
+    if (descontos.sindical) {
+      const descontoSindical = salarioBruto * 0.035;
+      salarioLiquido -= descontoSindical;
+    }
+
+    if (descontos.valeAlimentacao) {
+      const descontoValeAlimentacao = 300;
+      salarioLiquido -= descontoValeAlimentacao;
+    }
+
+    if (descontos.valeTransporte) {
+      const descontoValeTransporte = 180;
+      salarioLiquido -= descontoValeTransporte;
+    }
     const funcionarioData = {
       nome,
       cargo,
@@ -36,16 +84,21 @@ const CadastroFuncionario = ({ onCadastro }) => {
       cpf,
       sexo,
       tipoEmpregado,
-      temFilhos,
-      quantidadeFilhos,
-      salarioBruto,
+      salarioBruto: 3000,
       descontos,
+      salarioLiquido,
       diasTrabalhados,
       horasExtras,
-      comissao
+      comissao,
+      dependentesSelecionados,
+      dataAdmissao,
+      salarioMaternidade,
+      temDSR
     };
-    onCadastro(funcionarioData);
-    setMensagem('Funcionário cadastrado com sucesso!');
+    const novosFuncionarios = [...funcionarios, funcionarioData];
+    setFuncionarios(novosFuncionarios);
+    banco.saveData('funcionarios', novosFuncionarios);
+    onCadastro(novosFuncionarios);
 
     setNome('');
     setCargo('');
@@ -54,21 +107,25 @@ const CadastroFuncionario = ({ onCadastro }) => {
     setCpf('');
     setSexo('');
     setTipoEmpregado('');
-    setTemFilhos(false);
-    setQuantidadeFilhos(0);
     setSalarioBruto(3000);
+    setDescontoBeneficio(false);
     setDescontos({
-      inss: false,
+      inss: true,
+      irrf: true,
       sindical: false,
-      fgts: false,
+      fgts: true,
       valeAlimentacao: false,
       valeTransporte: false
     });
-
     setDiasTrabalhados(0);
     setHorasExtras('');
     setComissao('');
+    setDependentesSelecionados([]);
+    setDataAdmissao('');
+    setSalarioMaternidade(false);
+    setTemDSR(false);
 
+    setMensagem('Funcionário cadastrado com sucesso!');
     setTimeout(() => {
       setMensagem('');
     }, 3000);
@@ -80,36 +137,69 @@ const CadastroFuncionario = ({ onCadastro }) => {
       ...prevDescontos,
       [name]: checked
     }));
-  };
+  }
+  const [descontos, setDescontos] = useState({
+    inss: true,
+    irrf: false,
+    sindical: false,
+    fgts: true,
+    valeAlimentacao: false,
+    valeTransporte: false
+  })
+
+  const [diasTrabalhados, setDiasTrabalhados] = useState(0);
+  const [horasExtras, setHorasExtras] = useState('');
+  const [comissao, setComissao] = useState('');
+  const [mensagem, setMensagem] = useState('');
 
   return (
     <form onSubmit={handleSubmit}>
-
       <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome" />
       <input type="text" value={cargo} onChange={(e) => setCargo(e.target.value)} placeholder="Cargo" />
       <input type="text" value={funcao} onChange={(e) => setFuncao(e.target.value)} placeholder="Função" />
       <input type="text" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="Telefone" />
       <input type="text" value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="CPF" />
-      <select value={sexo} onChange={(e) => setSexo(e.target.value)}>
 
-        <option value="">Selecione o sexo</option>
-        <option value="Masculino">Masculino</option>
-        <option value="Feminino">Feminino</option>
-      </select>
+      <label>
+        Sexo:
+        <select value={sexo} onChange={(e) => setSexo(e.target.value)}>
+          <option value="">Selecione o sexo</option>
+          <option value="Masculino">Masculino</option>
+          <option value="Feminino">Feminino</option>
+        </select>
+      </label>
       {sexo === 'Feminino' && (
-        <div>
-          <label>
-            Se tiver filhos menores que 14 anos, selecione quantos:
-            <input type="number" value={quantidadeFilhos} onChange={(e) => setQuantidadeFilhos(e.target.value)} />
-          </label>
-        </div>
+        <label>
+          Salário Maternidade:
+          <input
+            type="checkbox"
+            checked={salarioMaternidade}
+            onChange={(e) => setSalarioMaternidade(e.target.checked)}
+          />
+        </label>
       )}
+      <label>
+        Tem direito a DSR:
+        <input
+          type="checkbox"
+          checked={temDSR}
+          onChange={(e) => setTemDSR(e.target.checked)}
+        />
+      </label>
+      <label>
+        Data de Admissão:
+        <input type="date" value={dataAdmissao} onChange={(e) => setDataAdmissao(e.target.value)} />
+      </label>
+
+      <label>
+        Salário Bruto: R$3.000
+      </label>
 
       <select value={tipoEmpregado} onChange={(e) => setTipoEmpregado(e.target.value)}>
         <option value="">Selecione o tipo de empregado</option>
         <option value="CLT">CLT</option>
         <option value="Aprendiz">Aprendiz</option>
-        <option value="Autômomo">Autônomo</option>
+        <option value="Autônomo">Autônomo</option>
         <option value="Estagiario">Estagiário</option>
         <option value="Sócio">Sócio</option>
       </select>
@@ -131,21 +221,12 @@ const CadastroFuncionario = ({ onCadastro }) => {
         <h3>Descontos</h3>
         <label>
           INSS:
-          <autoinp
+          <input
             type="checkbox"
             name="inss"
             checked={descontos.inss}
             onChange={handleDescontoChange}
-          />
-        </label>
-        
-        <label>
-          Sindicato:
-          <input
-            type="checkbox"
-            name="sindical"
-            checked={descontos.sindical}
-            onChange={handleDescontoChange}
+            disabled 
           />
         </label>
         <label>
@@ -155,8 +236,28 @@ const CadastroFuncionario = ({ onCadastro }) => {
             name="fgts"
             checked={descontos.fgts}
             onChange={handleDescontoChange}
+            disabled 
           />
         </label>
+        <label>
+          IRRF:
+          <input
+            type="checkbox"
+            name="irrf"
+            checked={descontos.irrf}
+            onChange={handleDescontoChange}
+          />
+        </label>
+        <label>
+          Sindicato:
+          <input
+            type="checkbox"
+            name="sindical"
+            checked={descontos.sindical}
+            onChange={handleDescontoChange}
+          />
+        </label>
+
         <label>
           Vale Alimentação:
           <input
@@ -175,11 +276,65 @@ const CadastroFuncionario = ({ onCadastro }) => {
             onChange={handleDescontoChange}
           />
         </label>
+
+        <div>
+          <h3></h3>
+          <ul>
+            {listaDependentes && listaDependentes.map((dependente, index) => (
+              <li key={index}>
+                {dependente}
+                {dependentesSelecionados.includes(dependente) ? (
+                  <button type="button" onClick={() => handleRemoveDependente(dependente)}>
+                    Remover
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => handleAddDependente(dependente)}>
+                    Adicionar
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+        {/* <CadastroDependentes onSelecionarDependente={handleAddDependente} /> */}
         <button type="submit">Cadastrar Funcionário</button>
       </div>
+
+      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+        <h3>Lista de Funcionários:</h3>
+        <ul>
+          {funcionarios.map((funcionario, index) => (
+            <li key={index}>
+              <p>Nome: {funcionario.nome}</p>
+              <p>Cargo: {funcionario.cargo}</p>
+              <p>Função: {funcionario.funcao}</p>
+              <p>Telefone: {funcionario.telefone}</p>
+              <p>CPF: {funcionario.cpf}</p>
+              <p>Sexo: {funcionario.sexo}</p>
+              <p>Tipo de Empregado: {funcionario.tipoEmpregado}</p>
+              <p>Salário Bruto: {funcionario.salarioBruto}</p>
+              <p>Data de Admissão: {funcionario.dataAdmissao}</p>
+              <p>Descontos: {JSON.stringify(funcionario.descontos)}</p>
+              <p>Dias Trabalhados por Mês: {funcionario.diasTrabalhados}</p>
+              <p>Horas Extras: {funcionario.horasExtras}</p>
+              <p>Comissão: {funcionario.comissao}</p>
+              <p>Dependentes Selecionados: {funcionario.dependentesSelecionados && funcionario.dependentesSelecionados.map((dependente, index) => (
+                <span key={index}>{dependente.nome}{index !== funcionario.dependentesSelecionados.length - 1 && ', '}</span>
+              ))}</p>
+
+              <p>Salário Líquido: {funcionario.salarioLiquido}</p>
+              {funcionario.sexo === 'Feminino' && (
+                <p>Salário Maternidade: {funcionario.salarioMaternidade ? 'Sim' : 'Não'}</p>
+              )}
+              <p>Tem DSR: {funcionario.temDSR ? 'Sim' : 'Não'}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       {mensagem && <p>{mensagem}</p>}
     </form>
-  );
-};
+  )
+}
 
-export default CadastroFuncionario;
+export default CadastroFuncionario
